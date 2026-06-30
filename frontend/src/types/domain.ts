@@ -42,23 +42,24 @@ export interface FieldConfig {
   cropLabel: string;
   lat: number;
   lon: number;
-  soilTexture: string;
-  awhcMmPerM: number;
+  stageStartDate: string;
+  areaAcres?: number;
+  gddBaseTempC?: number;
+  gddUpperTempC?: number;
+  stageThresholds?: StageThreshold[];
+  soilTexture?: string;
+  awhcMmPerM?: number;
   soilMapUnitKey?: string;
   soilMapUnitName?: string;
   soilComponentName?: string;
   soilComponentPercent?: number;
   hydrologicGroup?: string;
   drainageClass?: string;
-  rootDepthM: number;
-  madFraction: number;
-  stageStartDate: string;
-  gddBaseTempC?: number;
-  gddUpperTempC?: number;
-  stageThresholds?: StageThreshold[];
-  irrigationEfficiency: number;
-  weatherCell: string;
-  elevationFt: number;
+  rootDepthM?: number;
+  madFraction?: number;
+  irrigationEfficiency?: number;
+  weatherCell?: string;
+  elevationFt?: number;
 }
 
 export interface WeatherRecord {
@@ -76,6 +77,7 @@ export interface WeatherRecord {
   rhMin?: number;
   rhMax?: number;
   tdewC?: number;
+  vpdKpa?: number;
   hourlyTempsC?: number[];
 }
 

@@ -1,5 +1,5 @@
 import { MapPin } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { mapboxConfig } from "../config/mapbox";
 
 interface FieldMapThumbnailProps {
@@ -15,6 +15,13 @@ export function FieldMapThumbnail({ lat, lon, label }: FieldMapThumbnailProps) {
   const staticMapUrl = hasStaticMapConfig
     ? `https://api.mapbox.com/styles/v1/${stylePath}/static/pin-s+934936(${lon},${lat})/${lon},${lat},13,0/180x112@2x?access_token=${mapboxConfig.token}`
     : "";
+
+  // The component is keyed by field.id, so editing coordinates in place changes
+  // the image URL without remounting; reset status so the new image can load
+  // (and recover from a prior error state, where the <img> is otherwise unmounted).
+  useEffect(() => {
+    setStatus("loading");
+  }, [staticMapUrl]);
 
   return (
     <div className="field-map-thumb" aria-label={`${label} map preview`}>

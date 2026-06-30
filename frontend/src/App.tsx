@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AuthSession } from "./backend/authRepository";
-import { getAuthSession, loginWithPassword, logout, onAuthChange } from "./backend/authRepository";
+import { getAuthSession, loginWithPassword, logout, onAuthChange, registerWithPassword } from "./backend/authRepository";
 import { loadFieldStorage, saveFieldStorage } from "./backend/fieldStorage";
 import { Dashboard } from "./components/Dashboard";
 import { FieldManager } from "./components/FieldManager";
+import { FieldSidebar } from "./components/FieldSidebar";
 import { Header } from "./components/Header";
-import { Sidebar } from "./components/Sidebar";
 import { loadFields } from "./utils/storage";
 import type { FieldConfig } from "./types/domain";
 
@@ -58,6 +58,11 @@ export function App() {
     setStorageWarning(state.warning ?? null);
   }
 
+  function handleSelectField(fieldId: string) {
+    setSelectedFieldId(fieldId);
+    setActiveView("Analytics");
+  }
+
   function handleCreateField(field: FieldConfig) {
     const nextFields = [...fields, field];
     void persistFields(nextFields, field);
@@ -76,6 +81,11 @@ export function App() {
     setAuthSession(session);
   }
 
+  async function handleRegister(email: string, password: string, passwordConfirm: string) {
+    const session = await registerWithPassword({ email, password, passwordConfirm });
+    setAuthSession(session);
+  }
+
   function handleLogout() {
     logout();
     setAuthSession(getAuthSession());
@@ -86,32 +96,31 @@ export function App() {
   return (
     <div className="app-shell">
       <Header
-        fields={fields}
-        selectedFieldId={selectedField?.id ?? ""}
         activeView={activeView}
+        canViewAnalytics={Boolean(selectedField)}
         authSession={authSession}
-        onFieldChange={setSelectedFieldId}
         onViewChange={setActiveView}
         onLogin={handleLogin}
+        onRegister={handleRegister}
         onLogout={handleLogout}
       />
       <div className="body-shell">
-        <Sidebar activeView={activeView} onViewChange={setActiveView} />
-        {activeView === "Fields" ? (
-          <FieldManager
-            fields={fields}
-            selectedFieldId={selectedField?.id ?? ""}
-            onSelectField={setSelectedFieldId}
-            onCreateField={handleCreateField}
-            onUpdateField={handleUpdateField}
-          />
-        ) : activeView === "Analytics" && selectedField ? (
-          <Dashboard field={selectedField} />
+        {activeView === "Analytics" && selectedField ? (
+          <div className="analytics-shell">
+            <FieldSidebar
+              key={selectedField.id}
+              field={selectedField}
+              fields={fields}
+              onSelectField={setSelectedFieldId}
+              onUpdateField={handleUpdateField}
+            />
+            <Dashboard field={selectedField} />
+          </div>
         ) : (
           <FieldManager
             fields={fields}
             selectedFieldId={selectedField?.id ?? ""}
-            onSelectField={setSelectedFieldId}
+            onSelectField={handleSelectField}
             onCreateField={handleCreateField}
             onUpdateField={handleUpdateField}
           />

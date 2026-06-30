@@ -16,6 +16,7 @@ vite.config.d.ts
 **/.env
 **/.env.local
 **/.env.*.local
+**/.env.production
 
 # PocketBase runtime data and binaries
 pocketbase/pb_data/

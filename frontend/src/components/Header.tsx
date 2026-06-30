@@ -1,38 +1,51 @@
-import { Bell, Rows3 } from "lucide-react";
 import type { AuthSession } from "../backend/authRepository";
-import type { FieldConfig } from "../types/domain";
 import { AuthStatus } from "./AuthStatus";
 
 interface HeaderProps {
-  fields: FieldConfig[];
-  selectedFieldId: string;
   activeView: string;
+  canViewAnalytics: boolean;
   authSession: AuthSession;
-  onFieldChange: (fieldId: string) => void;
   onViewChange: (view: string) => void;
   onLogin: (email: string, password: string) => Promise<void>;
+  onRegister: (email: string, password: string, passwordConfirm: string) => Promise<void>;
   onLogout: () => void;
 }
 
-export function Header({ fields, selectedFieldId, activeView, authSession, onFieldChange, onViewChange, onLogin, onLogout }: HeaderProps) {
+export function Header({ activeView, canViewAnalytics, authSession, onViewChange, onLogin, onRegister, onLogout }: HeaderProps) {
+  // Any view that isn't "Analytics" renders the field manager, so the Fields tab
+  // is active whenever Analytics is not.
+  const analyticsActive = activeView === "Analytics" && canViewAnalytics;
+
   return (
     <header className="topbar">
-      <div className="brand">Water 3D</div>
-      <select className="field-select" value={selectedFieldId} onChange={(event) => onFieldChange(event.target.value)}>
-        {fields.map((field) => (
-          <option key={field.id} value={field.id}>
-            {field.name} - {field.cropLabel}
-          </option>
-        ))}
-      </select>
-      <div />
-      <div className="header-actions">
-        <button className="manage-fields-button" onClick={() => onViewChange("Fields")}>
-          <Rows3 size={16} />
-          Manage Fields
+      <button
+        type="button"
+        className="brand brand-button"
+        onClick={() => canViewAnalytics && onViewChange("Analytics")}
+      >
+        Water 3D
+      </button>
+      <nav className="main-nav" aria-label="Primary">
+        <button
+          type="button"
+          className={analyticsActive ? "nav-active" : ""}
+          aria-current={analyticsActive ? "page" : undefined}
+          disabled={!canViewAnalytics}
+          onClick={() => onViewChange("Analytics")}
+        >
+          Analytics
         </button>
-        <Bell size={22} />
-        <AuthStatus session={authSession} onLogin={onLogin} onLogout={onLogout} />
+        <button
+          type="button"
+          className={!analyticsActive ? "nav-active" : ""}
+          aria-current={!analyticsActive ? "page" : undefined}
+          onClick={() => onViewChange("Fields")}
+        >
+          Fields
+        </button>
+      </nav>
+      <div className="header-actions">
+        <AuthStatus session={authSession} onLogin={onLogin} onRegister={onRegister} onLogout={onLogout} />
       </div>
     </header>
   );

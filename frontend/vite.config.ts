@@ -6,11 +6,15 @@ export default defineConfig(({ mode }) => {
   const openEtTarget = env.VITE_OPENET_BASE_URL || "https://openet-api.org";
   const soilTarget = env.VITE_SOIL_DATA_ACCESS_BASE_URL || "https://sdmdataaccess.nrcs.usda.gov";
   const climateToolboxTarget = env.VITE_CLIMATE_TOOLBOX_CFS_BASE_URL || "https://climate-dev.nkn.uidaho.edu";
+  const gridMetTarget = env.VITE_GRIDMET_BASE_URL || "https://toolbox-webservices.nkn.uidaho.edu";
   const openMeteoTarget = env.VITE_OPEN_METEO_ARCHIVE_BASE_URL || "https://archive-api.open-meteo.com";
 
   return {
     plugins: [react()],
     server: {
+      host: true,
+      port: 5180,
+      strictPort: true,
       proxy: {
         "/api/openet": {
           target: openEtTarget,
@@ -29,6 +33,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
           rewrite: (path) => path.replace(/^\/api\/climate-toolbox/, ""),
+        },
+        "/api/gridmet": {
+          target: gridMetTarget,
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path.replace(/^\/api\/gridmet/, ""),
         },
         "/api/open-meteo": {
           target: openMeteoTarget,

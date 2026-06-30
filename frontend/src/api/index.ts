@@ -19,7 +19,7 @@ export { buildOpenEtPointTimeseriesBody, openEtApi, toOpenEtVariable } from "./o
 export type { OpenEtPointTimeseriesBody, OpenEtPointTimeseriesRequest } from "./openEt";
 export { openEtProvider } from "./openEt";
 export { openMeteoApi, openMeteoProvider, parseOpenMeteoHistoricalWeather } from "./openMeteo";
+export { buildGridMetWeatherRecords, getGridMetAvailableThrough, gridMetApi, gridMetProvider, parseGridMetSeries } from "./gridMet";
 export { climateToolboxApi, climateToolboxProvider, parseClimateToolboxForecastPet, parseClimateToolboxForecastWeather } from "./climate";
-export type { ClimateToolboxForecastPetRequest } from "./climate";
 export { buildSoilDetectionPostBody, buildSoilDetectionQuery, parseSoilDetectionResponse, soilDataAccessApi, soilDataAccessProvider } from "./soil";
 export type { SoilDataAccessPostBody, SoilDetectionRequest, SoilDetectionResponse, SoilDetectionRow } from "./soil";

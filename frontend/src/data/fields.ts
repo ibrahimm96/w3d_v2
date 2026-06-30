@@ -12,13 +12,6 @@ export const defaultFields: FieldConfig[] = [
     cropLabel: `${almond.label} (${almond.varietyHint})`,
     lat: 36.7378,
     lon: -119.7871,
-    soilTexture: "Sandy Loam (SSURGO)",
-    awhcMmPerM: almond.tawMmPerM,
-    rootDepthM: almond.rootDepthM,
-    madFraction: almond.madFraction,
     stageStartDate: getCurrentYearStartDate(),
-    irrigationEfficiency: 0.85,
-    weatherCell: "Grid ID #4829",
-    elevationFt: 342,
   },
 ];

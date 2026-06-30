@@ -29,11 +29,25 @@ export function FieldManager({ fields, selectedFieldId, onSelectField, onCreateF
   }
 
   if (editingField) {
-    return <SetupPanel field={editingField} onCreateField={onCreateField} onUpdateField={handleUpdateField} onCancel={() => setEditingFieldId(null)} />;
+    return (
+      <SetupPanel
+        field={editingField}
+        onCreateField={onCreateField}
+        onUpdateField={handleUpdateField}
+        onCancel={() => setEditingFieldId(null)}
+        onGoHome={() => onSelectField(editingField.id)}
+      />
+    );
   }
 
   if (isAddingField) {
-    return <SetupPanel onCreateField={handleCreateField} onCancel={fields.length > 0 ? () => setIsAddingField(false) : undefined} />;
+    return (
+      <SetupPanel
+        onCreateField={handleCreateField}
+        onCancel={fields.length > 0 ? () => setIsAddingField(false) : undefined}
+        onGoHome={selectedFieldId ? () => onSelectField(selectedFieldId) : undefined}
+      />
+    );
   }
 
   return (
@@ -82,8 +96,8 @@ export function FieldManager({ fields, selectedFieldId, onSelectField, onCreateF
                 <dd>{field.stageThresholds?.length ? `${stageCount} custom` : `${stageCount} default`}</dd>
               </div>
               <div>
-                <dt>AWHC / MAD</dt>
-                <dd>{Math.round(field.awhcMmPerM)} mm/m - {Math.round(field.madFraction * 100)}%</dd>
+                <dt>Biofix</dt>
+                <dd>{cropMetrics.gdd.biofixLabel}</dd>
               </div>
             </dl>
             <span

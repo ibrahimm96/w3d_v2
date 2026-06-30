@@ -25,7 +25,13 @@ export function loadLocalFields(): FieldConfig[] {
 }
 
 export function saveLocalFields(fields: FieldConfig[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(fields));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fields));
+  } catch (error) {
+    debugDataSource("pocketbase", "local field save failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export async function loadFieldStorage(): Promise<FieldStorageState> {

@@ -11,7 +11,7 @@ export interface Coordinates {
 }
 
 export interface ApiMetadata {
-  provider: "mapbox" | "openet" | "open-meteo" | "nrcs-soil-data-access" | "catherine" | "climate" | "local" | "unknown";
+  provider: "mapbox" | "openet" | "open-meteo" | "gridmet" | "nrcs-soil-data-access" | "catherine" | "climate" | "local" | "unknown";
   generatedAt?: string;
   qualityFlags?: string[];
   sourceUrl?: string;
@@ -52,6 +52,9 @@ export interface WeatherDataRequest extends ApiDateRange, Coordinates {
   timezone?: string;
   weatherCellId?: string;
   includeHourly?: boolean;
+  // "temperature" fetches only tmin/tmax — enough for GDD comparisons and far
+  // cheaper against slow providers like gridMET (one request per variable).
+  variableProfile?: "full" | "temperature";
 }
 
 export interface WeatherDataResponse {

@@ -293,6 +293,12 @@ export class OpenEtProvider implements EtProvider {
     }
 
     if (!byDate.size) {
+      const reasons = responses
+        .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+        .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+      if (reasons.length) {
+        throw new Error(`OpenET returned no usable ET records: ${reasons.join("; ")}`);
+      }
       throw new Error("OpenET did not return usable ET records for this field/date range.");
     }
 

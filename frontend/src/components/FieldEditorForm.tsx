@@ -1,0 +1,221 @@
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
+import { getCropMetricProfile } from "../data/cropMetrics";
+import type { CropId, FieldConfig, StageThreshold } from "../types/domain";
+import { CropSelect, cropOptionLabel } from "./CropSelect";
+
+interface FieldEditorFormProps {
+  /** Fully-controlled working copy of the field. */
+  draft: FieldConfig;
+  onChange: (next: FieldConfig) => void;
+  /** Render the field-name input (hidden when the name is edited elsewhere, e.g. the sidebar heading). */
+  includeName?: boolean;
+}
+
+interface FieldFieldsProps {
+  draft: FieldConfig;
+  onChange: (next: FieldConfig) => void;
+}
+
+// Field name + acreage. Pulled out so the analytics sidebar and the setup page
+// can frame it differently (its own "General Information" card on setup).
+export function GeneralInfoFields({ draft, onChange }: FieldFieldsProps) {
+  function patch(next: Partial<FieldConfig>) {
+    onChange({ ...draft, ...next });
+  }
+
+  return (
+    <div className="parameter-grid parameter-grid-pair">
+      <label>
+        <span>Field name</span>
+        <input value={draft.name} onChange={(event) => patch({ name: event.target.value })} placeholder="e.g. West Orchard Sector 4" />
+      </label>
+      <label>
+        <span>Acreage</span>
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          value={draft.areaAcres ?? ""}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            patch({ areaAcres: event.target.value === "" || !Number.isFinite(value) ? undefined : value });
+          }}
+          placeholder="Acres"
+        />
+      </label>
+    </div>
+  );
+}
+
+// Crop picker. Switching crops swaps the GDD model + stage list, so reset those
+// controls to the new crop's defaults rather than carrying over mismatched values.
+export function CropField({ draft, onChange }: FieldFieldsProps) {
+  function handleCropChange(nextCropId: CropId) {
+    if (nextCropId === draft.cropId) return;
+    const nextMetrics = getCropMetricProfile(nextCropId);
+    onChange({
+      ...draft,
+      cropId: nextCropId,
+      cropLabel: cropOptionLabel(nextCropId),
+      gddBaseTempC: nextMetrics.gdd.baseTempC,
+      gddUpperTempC: nextMetrics.gdd.upperTempC,
+      stageThresholds: undefined,
+    });
+  }
+
+  return <CropSelect value={draft.cropId} onChange={handleCropChange} id="editor-crop-select" />;
+}
+
+// Planting/biofix date + the GDD base/upper temperatures.
+export function SeasonGddFields({ draft, onChange }: FieldFieldsProps) {
+  const cropMetrics = getCropMetricProfile(draft.cropId);
+
+  function patch(next: Partial<FieldConfig>) {
+    onChange({ ...draft, ...next });
+  }
+
+  return (
+    <>
+      <p className="editor-hint">{cropMetrics.gdd.biofixLabel}</p>
+      <div className="parameter-grid parameter-grid-narrow">
+        <label>
+          <span>Plant / Biofix Date</span>
+          <input
+            type="date"
+            value={draft.stageStartDate}
+            onChange={(event) => event.target.value && patch({ stageStartDate: event.target.value })}
+          />
+        </label>
+      </div>
+      <div className="parameter-grid parameter-grid-pair">
+        <label>
+          <span>Base Tmin (&deg;C)</span>
+          <input type="number" step="0.1" value={draft.gddBaseTempC ?? cropMetrics.gdd.baseTempC} onChange={(event) => patch({ gddBaseTempC: Number(event.target.value) })} />
+        </label>
+        <label>
+          <span>Upper Tmax (&deg;C)</span>
+          <input type="number" step="0.1" value={draft.gddUpperTempC ?? cropMetrics.gdd.upperTempC} onChange={(event) => patch({ gddUpperTempC: Number(event.target.value) })} />
+        </label>
+      </div>
+    </>
+  );
+}
+
+interface StageThresholdsFieldsProps extends FieldFieldsProps {
+  /** Render the built-in "Growth Stage Thresholds" heading. Disable when the
+      surrounding card already supplies its own heading (e.g. the setup page). */
+  heading?: boolean;
+}
+
+// Editable growth-stage list. Stages default to the crop profile until the user
+// edits them; the first change promotes the field to a custom stage list.
+export function StageThresholdsFields({ draft, onChange, heading = true }: StageThresholdsFieldsProps) {
+  const cropMetrics = getCropMetricProfile(draft.cropId);
+  const isCustomized = Boolean(draft.stageThresholds?.length);
+  const stages = isCustomized ? draft.stageThresholds! : cropMetrics.gdd.stages;
+
+  function patch(next: Partial<FieldConfig>) {
+    onChange({ ...draft, ...next });
+  }
+
+  function commitStages(next: StageThreshold[]) {
+    patch({ stageThresholds: next });
+  }
+
+  function updateStage(index: number, change: Partial<StageThreshold>) {
+    commitStages(stages.map((stage, stageIndex) => (stageIndex === index ? { ...stage, ...change } : stage)));
+  }
+
+  function deleteStage(index: number) {
+    commitStages(stages.filter((_, stageIndex) => stageIndex !== index));
+  }
+
+  function addStage() {
+    const lastNumeric = [...stages].reverse().find((stage) => typeof stage.gdd === "number")?.gdd ?? 0;
+    commitStages([...stages, { label: "New stage", gdd: lastNumeric + 100 }]);
+  }
+
+  function resetStages() {
+    patch({ stageThresholds: undefined });
+  }
+
+  const resetLink = isCustomized ? (
+    <button type="button" className="stage-reset-link" onClick={resetStages}>
+      <RotateCcw size={13} />
+      Reset to defaults
+    </button>
+  ) : null;
+
+  return (
+    <>
+      {heading ? (
+        <div className="stage-section-header">
+          <h3>Growth Stage Thresholds</h3>
+          {resetLink}
+        </div>
+      ) : resetLink ? (
+        <div className="stage-section-header stage-section-header-bare">{resetLink}</div>
+      ) : null}
+      <p className="editor-hint">Edit a stage's GDD or name to customize. Add or remove stages as needed.</p>
+      <div className="stage-edit-list">
+        {stages.map((stage, index) => (
+          <div key={index} className="stage-edit-row">
+            <input
+              className="stage-edit-label"
+              value={stage.label}
+              aria-label={`Stage ${index + 1} name`}
+              onChange={(event) => updateStage(index, { label: event.target.value })}
+            />
+            <input
+              className="stage-edit-gdd"
+              type="number"
+              min="0"
+              step="1"
+              value={stage.gdd ?? ""}
+              aria-label={`Stage ${index + 1} GDD`}
+              placeholder="--"
+              onChange={(event) => updateStage(index, { gdd: event.target.value === "" ? null : Number(event.target.value) })}
+            />
+            <button type="button" className="stage-delete-button" aria-label={`Delete ${stage.label}`} onClick={() => deleteStage(index)}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" className="stage-add-button" onClick={addStage}>
+        <Plus size={14} />
+        Add stage
+      </button>
+    </>
+  );
+}
+
+// The non-location attributes of a field (name, crop, acreage, season/GDD model,
+// stage thresholds). Location is edited separately, so this form is reused by
+// the analytics sidebar and the field setup page.
+export function FieldEditorForm({ draft, onChange, includeName = true }: FieldEditorFormProps) {
+  return (
+    <div className="field-editor">
+      {includeName ? (
+        <section className="editor-section">
+          <h3>Field</h3>
+          <GeneralInfoFields draft={draft} onChange={onChange} />
+        </section>
+      ) : null}
+
+      <section className="editor-section">
+        <h3>Crop</h3>
+        <CropField draft={draft} onChange={onChange} />
+      </section>
+
+      <section className="editor-section">
+        <h3>Season &amp; GDD Model</h3>
+        <SeasonGddFields draft={draft} onChange={onChange} />
+      </section>
+
+      <section className="editor-section">
+        <StageThresholdsFields draft={draft} onChange={onChange} />
+      </section>
+    </div>
+  );
+}

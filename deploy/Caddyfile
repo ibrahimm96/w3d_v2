@@ -1,0 +1,64 @@
+# Caddy edge for Water 3D (single-server prod).
+#
+# Serves the static SPA, reverse-proxies the weather APIs under /api/* (the prod
+# replacement for the Vite dev proxy in frontend/vite.config.ts), and fronts
+# PocketBase at pb.<domain> with automatic HTTPS. DOMAIN and ACME_EMAIL come from
+# the compose environment.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# Lock down once you've confirmed all sources load. Mapbox + the /api
+		# proxies are same-origin; PocketBase is the pb.<domain> connect-src.
+		# Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://pb.{$DOMAIN}; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
+	}
+
+	# --- Weather API proxies (handle_path strips the /api/<name> prefix, matching
+	#     the Vite dev-proxy rewrites; Host is set to each upstream). ---
+	handle_path /api/gridmet/* {
+		reverse_proxy https://toolbox-webservices.nkn.uidaho.edu {
+			header_up Host toolbox-webservices.nkn.uidaho.edu
+		}
+	}
+	handle_path /api/climate-toolbox/* {
+		reverse_proxy https://climate-dev.nkn.uidaho.edu {
+			header_up Host climate-dev.nkn.uidaho.edu
+		}
+	}
+	handle_path /api/open-meteo/* {
+		reverse_proxy https://archive-api.open-meteo.com {
+			header_up Host archive-api.open-meteo.com
+		}
+	}
+	handle_path /api/openet/* {
+		reverse_proxy https://openet-api.org {
+			header_up Host openet-api.org
+		}
+	}
+	handle_path /api/soil-data-access/* {
+		reverse_proxy https://sdmdataaccess.nrcs.usda.gov {
+			header_up Host sdmdataaccess.nrcs.usda.gov
+		}
+	}
+
+	# --- Static SPA (catch-all, evaluated after the /api/* handlers) ---
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# PocketBase API + admin UI, TLS-terminated here; the container itself is not
+# published to the host (only reachable on the compose network).
+pb.{$DOMAIN} {
+	reverse_proxy pocketbase:8090
+}

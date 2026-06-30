@@ -112,7 +112,6 @@ function FieldSetupMap({ lat, lon, onLocationChange }: FieldSetupMapProps) {
       <div ref={containerRef} className="mapbox-canvas" />
       {!isLoaded && !error ? <div className="map-loading">Loading map...</div> : null}
       {error ? <div className="map-loading map-error">{error}</div> : null}
-      {isLoaded && !error ? <div className="mapbox-pin-label">PIN PLACED</div> : null}
     </div>
   );
 }

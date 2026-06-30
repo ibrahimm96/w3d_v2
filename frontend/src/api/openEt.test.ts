@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildOpenEtPointTimeseriesBody, getSupportedOpenEtDateRange, OpenEtProvider } from "./openEt";
+import { buildOpenEtPointTimeseriesBody, getSupportedOpenEtDateRange, openEtApi, OpenEtProvider } from "./openEt";
 import { openEtConfig } from "../config/openet";
 
 const baseRequest = {
@@ -8,10 +8,12 @@ const baseRequest = {
   lon: -119.7871,
 };
 const originalMaxAvailableDate = openEtConfig.maxAvailableDate;
+const originalEnabled = openEtApi.enabled;
 
 describe("OpenET API client", () => {
   afterEach(() => {
     openEtConfig.maxAvailableDate = originalMaxAvailableDate;
+    openEtApi.enabled = originalEnabled;
     vi.restoreAllMocks();
   });
 
@@ -67,6 +69,7 @@ describe("OpenET API client", () => {
   });
 
   it("deduplicates concurrent requests for the same field and date range", async () => {
+    openEtApi.enabled = true;
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { variable: string };
 

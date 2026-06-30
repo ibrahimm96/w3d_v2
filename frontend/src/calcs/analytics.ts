@@ -14,7 +14,12 @@ export function buildAnalyticsSnapshot(
   let cumulativeEtcMm = 0;
   const startDate = field.stageStartDate;
   const weatherWindow = startDate ? weather.filter((record) => record.date >= startDate) : weather;
-  const effectiveCrop = field.stageThresholds?.length ? { ...crop, stages: field.stageThresholds } : crop;
+  const effectiveCrop = {
+    ...crop,
+    tBaseC: field.gddBaseTempC ?? crop.tBaseC,
+    tUpperC: field.gddUpperTempC ?? crop.tUpperC,
+    ...(field.stageThresholds?.length ? { stages: field.stageThresholds } : {}),
+  };
 
   const records: DailyAnalytics[] = weatherWindow.map((record) => {
     const gdd = dailyGdd(record, effectiveCrop);
@@ -39,7 +44,7 @@ export function buildAnalyticsSnapshot(
   const currentStage = numericStages.reduce((active, stage) => (typeof stage.gdd === "number" && currentGdd >= stage.gdd ? stage : active), numericStages[0] ?? effectiveCrop.stages[0]);
   const nextStage = numericStages.find((stage) => typeof stage.gdd === "number" && stage.gdd > currentGdd);
   const currentKc = records.at(-1)?.kc ?? effectiveCrop.kcCurve[0].kc;
-  const cumulativeEtoMm = Number(weather.reduce((total, record) => total + record.etoMm, 0).toFixed(1));
+  const cumulativeEtoMm = Number(weatherWindow.reduce((total, record) => total + record.etoMm, 0).toFixed(1));
   const latestVpd = [...records].reverse().find((record) => typeof record.vpdKpa === "number")?.vpdKpa;
   const chillPortions = effectiveCrop.chillRequirementPortions ? estimateChillPortions(weather) : undefined;
   const stressLevel =

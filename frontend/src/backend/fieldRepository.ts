@@ -38,18 +38,26 @@ export class PocketBaseFieldRepository implements FieldRepository {
     }
 
     const payload = toPocketBasePayload(field);
+    const collection = pb.collection(backendConfig.pocketBaseFieldsCollection);
 
+    // Only a genuine 404 from the existence check should fall back to create();
+    // an update failure (network, validation, permission) must surface instead
+    // of triggering a create() that then fails with a duplicate-id error.
+    let exists = false;
     try {
-      await pb.collection(backendConfig.pocketBaseFieldsCollection).getOne(field.id);
-      const updated = await pb.collection(backendConfig.pocketBaseFieldsCollection).update<Record<string, unknown>>(field.id, payload);
-      return fromPocketBaseRecord(updated);
+      await collection.getOne(field.id);
+      exists = true;
     } catch (error) {
-      const created = await pb.collection(backendConfig.pocketBaseFieldsCollection).create<Record<string, unknown>>({
-        ...payload,
-        id: field.id,
-      });
-      return fromPocketBaseRecord(created);
+      if ((error as { status?: number }).status !== 404) {
+        throw error;
+      }
     }
+
+    const saved = exists
+      ? await collection.update<Record<string, unknown>>(field.id, payload)
+      : await collection.create<Record<string, unknown>>({ ...payload, id: field.id });
+
+    return fromPocketBaseRecord(saved);
   }
 }
 
@@ -80,6 +88,7 @@ export function toPocketBasePayload(field: FieldConfig): Record<string, unknown>
       gddBaseTempC: field.gddBaseTempC,
       gddUpperTempC: field.gddUpperTempC,
       stageThresholds: field.stageThresholds,
+      areaAcres: field.areaAcres,
     },
     irrigationEfficiency: field.irrigationEfficiency,
     weatherCell: field.weatherCell,
@@ -106,6 +115,7 @@ export function fromPocketBaseRecord(record: Record<string, unknown>): FieldConf
     rootDepthM: Number(record.rootDepthM ?? 1),
     madFraction: Number(record.madFraction ?? 0.5),
     stageStartDate: String(record.stageStartDate ?? getCurrentYearStartDate()),
+    areaAcres: parseMetadataNumber(record.metadata, "areaAcres"),
     gddBaseTempC: parseMetadataNumber(record.metadata, "gddBaseTempC"),
     gddUpperTempC: parseMetadataNumber(record.metadata, "gddUpperTempC"),
     stageThresholds: parseStageThresholds(record.metadata),
@@ -120,7 +130,10 @@ function optionalString(value: unknown): string | undefined {
 }
 
 function optionalNumber(value: unknown): number | undefined {
-  const parsed = Number(value);
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+  const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 

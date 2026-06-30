@@ -27,7 +27,10 @@ export const openMeteoApi = {
   },
 };
 
-const openMeteoResponseCache = new Map<string, WeatherDataResponse>();
+// Response caching/TTL now lives in the TanStack Query layer
+// (src/api/queries/); here we keep only in-flight dedupe so concurrent identical
+// requests coalesce into one fetch.
+const openMeteoInFlightRequests = new Map<string, Promise<WeatherDataResponse>>();
 
 function toFiniteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -117,38 +120,44 @@ export class OpenMeteoProvider {
 
     const url = this.buildArchiveUrl(request);
     const cacheKey = url.toString();
-    const cached = openMeteoResponseCache.get(cacheKey);
-    if (cached) {
-      return cached;
+
+    const inFlight = openMeteoInFlightRequests.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
     }
 
-    const response = await fetchWithTimeout(url.toString());
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`Open-Meteo historical weather request failed with ${response.status}${detail ? `: ${detail.slice(0, 240)}` : ""}.`);
-    }
+    const promise = (async (): Promise<WeatherDataResponse> => {
+      const response = await fetchWithTimeout(url.toString());
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Open-Meteo historical weather request failed with ${response.status}${detail ? `: ${detail.slice(0, 240)}` : ""}.`);
+      }
 
-    const payload = (await response.json()) as OpenMeteoHistoricalPayload;
-    debugDataSource("open-meteo", "raw historical weather response", {
-      payload,
-      requestUrl: url.toString(),
+      const payload = (await response.json()) as OpenMeteoHistoricalPayload;
+      debugDataSource("open-meteo", "raw historical weather response", {
+        payload,
+        requestUrl: url.toString(),
+      });
+
+      const records = parseOpenMeteoHistoricalWeather(payload);
+      if (!records.length) {
+        throw new Error("Open-Meteo did not return usable historical weather records.");
+      }
+
+      return {
+        records,
+        metadata: {
+          provider: "open-meteo",
+          generatedAt: new Date().toISOString(),
+          sourceUrl: openMeteoApi.urls.archive,
+        },
+      };
+    })().finally(() => {
+      openMeteoInFlightRequests.delete(cacheKey);
     });
 
-    const records = parseOpenMeteoHistoricalWeather(payload);
-    if (!records.length) {
-      throw new Error("Open-Meteo did not return usable historical weather records.");
-    }
-
-    const result = {
-      records,
-      metadata: {
-        provider: "open-meteo",
-        generatedAt: new Date().toISOString(),
-        sourceUrl: openMeteoApi.urls.archive,
-      },
-    };
-    openMeteoResponseCache.set(cacheKey, result);
-    return result;
+    openMeteoInFlightRequests.set(cacheKey, promise);
+    return promise;
   }
 }
 

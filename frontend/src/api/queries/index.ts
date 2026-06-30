@@ -1,0 +1,5 @@
+// Barrel for the field-data cache layer (TanStack Query hooks + helpers).
+export { mergeWeatherRecords, seasonWeatherEnabled, useChillWeather, useSeasonWeather, useYearWeather } from "./weather";
+export type { SeasonWeatherResult, YearWeatherResult } from "./weather";
+export { useAnalyticsSnapshot, useChillSeries, useStageProjections } from "./computations";
+export { weatherKeys } from "./keys";
