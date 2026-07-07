@@ -1,9 +1,10 @@
-# Caddy edge for Water 3D (single-server prod).
+# Caddy edge for Water 3D (single-container prod).
 #
-# Serves the static SPA, reverse-proxies the weather APIs under /api/* (the prod
-# replacement for the Vite dev proxy in frontend/vite.config.ts), and fronts
-# PocketBase at pb.<domain> with automatic HTTPS. DOMAIN and ACME_EMAIL come from
-# the compose environment.
+# One domain, one cert. Caddy serves the static SPA, reverse-proxies the weather
+# APIs under /api/* (the prod replacement for the Vite dev proxy in
+# frontend/vite.config.ts), and proxies PocketBase under /pb/* to the sibling
+# process in the same container. DOMAIN and ACME_EMAIL come from the compose
+# environment.
 
 {
 	email {$ACME_EMAIL}
@@ -16,9 +17,18 @@
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
-		# Lock down once you've confirmed all sources load. Mapbox + the /api
-		# proxies are same-origin; PocketBase is the pb.<domain> connect-src.
-		# Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://pb.{$DOMAIN}; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
+		# Lock down once you've confirmed all sources load. Mapbox, the /api
+		# proxies, and /pb are all same-origin now.
+		# Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:"
+	}
+
+	# --- PocketBase: auth + owner-scoped field storage. handle_path strips the
+	#     /pb prefix, so the SDK's https://<domain>/pb base maps onto
+	#     PocketBase's own /api/... routes. (The admin dashboard at /_/ is NOT
+	#     exposed here — it doesn't render under a subpath; reach it via the
+	#     loopback SSH tunnel, see deploy/README.md.) ---
+	handle_path /pb/* {
+		reverse_proxy 127.0.0.1:8090
 	}
 
 	# --- Weather API proxies (handle_path strips the /api/<name> prefix, matching
@@ -49,16 +59,10 @@
 		}
 	}
 
-	# --- Static SPA (catch-all, evaluated after the /api/* handlers) ---
+	# --- Static SPA (catch-all, evaluated after the /pb and /api handlers) ---
 	handle {
 		root * /srv
 		try_files {path} /index.html
 		file_server
 	}
-}
-
-# PocketBase API + admin UI, TLS-terminated here; the container itself is not
-# published to the host (only reachable on the compose network).
-pb.{$DOMAIN} {
-	reverse_proxy pocketbase:8090
 }

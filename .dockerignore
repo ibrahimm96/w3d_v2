@@ -1,0 +1,15 @@
+# Build context is the repo root (see deploy/docker-compose.yml). Keep the
+# image build fast by excluding everything the Dockerfile doesn't COPY.
+**/node_modules
+**/dist
+.git
+.claude
+**/.env
+**/.env.*
+!**/.env.production
+**/*.local
+**/npm-debug.log*
+**/*.md
+prd.txt
+update_1.0.txt
+stitch_water_3d_decision_support 2/

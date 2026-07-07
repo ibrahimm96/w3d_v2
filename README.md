@@ -1,0 +1,186 @@
+# Water 3D
+
+Analytics-first irrigation/crop decision-support app for Central Valley growers. A
+map is used during field setup to locate a field; the core product is then a
+crop-aware analytics dashboard driven by **GDD, growth stages, chill, ET, and
+year-over-year comparisons**.
+
+- **`frontend/`** — React + Vite + TypeScript single-page app. Agronomic math lives
+  in pure modules under `src/calcs`; data-provider contracts under `src/api`.
+- **`pocketbase/`** — PocketBase backend (Docker): user accounts + owner-scoped
+  field storage. The app falls back to `localStorage` when it isn't running.
+- **`deploy/`** — production **single-container** stack (Caddy + PocketBase in one
+  image, one domain, auto-HTTPS).
+
+---
+
+## Quick start (fresh clone)
+
+**Prerequisites:** Node 22 + npm, and Docker with the Compose plugin
+(`docker compose version`).
+
+```bash
+git clone <repo> && cd w3d_v2
+
+# 1. Backend — PocketBase (migrations auto-apply on first boot)
+cd pocketbase
+docker compose up -d
+docker compose exec pocketbase /usr/local/bin/pocketbase superuser create admin@example.com "change-me-please"
+curl -s http://127.0.0.1:8090/api/health        # sanity check
+
+# 2. Frontend
+cd ../frontend
+npm install
+cp .env.example .env
+#    edit .env: set VITE_POCKETBASE_ENABLED=true
+#               and  VITE_POCKETBASE_URL=http://127.0.0.1:8090
+npm run dev
+```
+
+Open the printed URL (default http://localhost:5173). Click the user icon →
+**Sign up** to create an account; that switches field storage from `localStorage`
+to PocketBase. The PocketBase admin UI is at http://127.0.0.1:8090/_/.
+
+> The app runs **without** the backend too — it just stays on `localStorage` with
+> no accounts or cross-device storage until PocketBase is up.
+
+### Gotchas
+
+- **Env is build-time.** `frontend/.env` is gitignored (only `.env.example` is
+  committed) and is read when Vite starts — **restart `npm run dev`** after editing it.
+- **`.env.example` ships with PocketBase disabled.** You must set
+  `VITE_POCKETBASE_ENABLED=true` for login/signup to appear and work.
+- **Signup returns 403** → in the admin UI, `users` → API Rules → leave the
+  Create rule empty (public registration).
+- **No Docker?** Drop a PocketBase binary (≥ 0.23) into `pocketbase/` and run
+  `./pocketbase serve --http=0.0.0.0:8090` — it picks up the same `pb_migrations/`.
+
+---
+
+## Commands
+
+| | |
+| --- | --- |
+| `npm run dev` (in `frontend/`) | Vite dev server |
+| `npm test` | Vitest unit tests |
+| `npm run build` | TypeScript build + production bundle |
+| `docker compose up -d` (in `pocketbase/`) | start backend |
+| `docker compose logs -f` | follow backend logs / migrations |
+| `docker compose down` / `down -v` | stop (keep data) / stop and **wipe** data |
+
+---
+
+## Backend (PocketBase)
+
+On first boot the migrations in `pocketbase/pb_migrations/` create:
+
+| Collection | Purpose |
+| --- | --- |
+| `users` | Built-in auth collection (login/signup target) |
+| `fields` | User fields, owner-scoped (`owner = @request.auth.id`) |
+| `crop_types` | Crop profiles (seeded) |
+| `soil_types` | Soil profiles |
+| `openet_cache` | Server-side cache for OpenET responses |
+
+Data persists in the named `pb_data` Docker volume. See
+[`pocketbase/README.md`](pocketbase/README.md) for full details and troubleshooting.
+
+---
+
+## Data sources
+
+Weather/ET data is fetched live through the Vite dev proxy (`/api/*`); the
+production equivalent is Caddy reverse-proxying the same paths.
+
+| Source | Role | Notes |
+| --- | --- | --- |
+| **gridMET** (Climate Toolbox) | Primary history | Daily Tmin/Tmax, precip, ETo, RH, VPD back to 1979 via `/api/gridmet`. ~2-day lag; truncated tails are flagged with the actual last-available date. |
+| **Climate Toolbox CFS** | Forecast | 28-day PET + weather via `/api/climate-toolbox`, `calc-mode=all`; PET p10/median/p90 computed client-side from 48 ensemble members. |
+| **Open-Meteo** | Chill season | Sole source of real hourly temperatures (used for chill-hour accumulation). |
+| **OpenET** | Historical ET | Point time series, cached in PocketBase `openet_cache`. Adapter present but **not wired into the current GDD-focused UI**. |
+| **NRCS Soil Data Access** | Soil lookup | Map unit / texture / hydrologic group / AWHC, with local defaults as fallback. |
+| **Mapbox** | Setup map | Search + GL map during field setup; static images for field thumbnails. |
+
+Client-side caching: gridMET responses also persist to a versioned `localStorage`
+cache (`src/api/weatherCache.ts`, 7-day TTL) for fast repaints. TanStack Query
+caches the selected field's weather + computations.
+
+---
+
+## Dashboard at a glance
+
+- **Per-metric tools:** `GDD | Chill | ET` selector. Chill shows only for crops
+  with chill enabled; ET is always available.
+- **Full calendar-year GDD chart** (Jan 1–Dec 31): observed history + forecast,
+  dashed year-end projection from the 5-yr average, "today" reference line.
+  Default overlays are last year + the 5-yr average.
+- **Inline real-time controls** (base/upper temp, target, °F/°C, chill thresholds,
+  ET toggles) write straight to live settings — no draft/Apply gate. Less-common
+  options live in an **Advanced Graph Settings** modal.
+- **Metric cards** answer farmer questions: cumulative GDD with days ahead/behind
+  the 5-yr normal, current stage, projected next-stage date, chill hours
+  (perennials) or season progress (annuals).
+- **Growth Stage Timeline:** actual/forecast/projected dates per stage with the
+  most recent comparison year alongside.
+- Top bar carries the field selector + **Edit** / **Location** modals; field
+  identity lives there rather than in a sidebar.
+
+### Crop profiles
+
+Local v1 defaults exist for **almond, processing tomato, wine grape, pistachio,
+cotton, alfalfa** (base/upper temps, Kc curve, GDD stage thresholds, MAD, root
+depth, TAW, chill requirement where relevant, stress thresholds). Stage thresholds
+are editable per field and override the profile defaults. See
+[`CROP_GDD_REFERENCES.md`](CROP_GDD_REFERENCES.md). **Review before advisory use.**
+
+---
+
+## Important caveats
+
+- **Not yet production decision support.** Several paths are demo/fallback.
+- **Applied water** has no live source, so the days-until-irrigation depletion
+  estimate assumes **no irrigation applied** — it is an estimate, not a
+  recommendation, until applied-water input/telemetry is integrated.
+- **Historical ET fallback:** if live ET is unavailable, mock past-30-day ET is
+  shown and clearly labeled as mock. No mock forecast is ever generated.
+- **Hourly temperatures** are interpolated from daily Tmin/Tmax for the forecast
+  (specific humidity → approximate RH/dewpoint); exact chill/frost/heat workflows
+  still want real hourly data.
+- **Historical climatology percentile bands** are not implemented (forecast PET
+  p10/p90 bounds are shown, but those are forecast uncertainty, not climatology).
+
+---
+
+## Deployment
+
+Production runs as **one container on one domain** — Caddy (static SPA + `/api/*`
+weather proxy + `/pb/*` → PocketBase, automatic HTTPS) and PocketBase supervised
+together. It lives in [`deploy/`](deploy/README.md):
+
+```bash
+cd deploy
+cp ../frontend/.env.production.example ../frontend/.env.production   # set domain + Mapbox token
+export DOMAIN=fields.example.com ACME_EMAIL=you@example.com
+docker compose up -d --build
+```
+
+Key points: weather APIs **require** the `/api/*` proxy in prod (a bare static
+host breaks data); `VITE_POCKETBASE_URL` must point at the public
+`https://<domain>/pb`; and the PocketBase admin dashboard is loopback-only (reach
+it via `ssh -L 8090:localhost:8090 <server>`).
+
+---
+
+## Project layout
+
+```
+frontend/src/
+  api/        provider contracts + clients (gridMet, climate, openEt, soil, openMeteo)
+  calcs/      pure agronomic math (gdd, chill, kc, vpd, analytics, stageProjection)
+  components/ React UI (Dashboard, FieldManager, SetupPanel, AuthStatus, …)
+  backend/    PocketBase client, auth + field repositories, localStorage fallback
+  config/     env-driven config (backend, gridmet)
+  types/      domain types (FieldConfig, WeatherRecord, CropProfile, …)
+pocketbase/   docker-compose + pb_migrations (collections/schema) — local dev backend
+deploy/       single-container prod: Dockerfile + docker-compose.yml + Caddyfile + supervisord.conf
+```

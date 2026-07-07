@@ -1,0 +1,46 @@
+# Production stack for Water 3D — ONE container, ONE domain.
+#
+#   app   Caddy (TLS + static SPA + /api/* weather proxies + /pb/* → PocketBase)
+#         and PocketBase (auth + field storage), supervised together.
+#
+# Setup:
+#   cp ../frontend/.env.production.example ../frontend/.env.production   # edit domain + Mapbox token
+#   export DOMAIN=fields.example.com ACME_EMAIL=you@example.com         # or use a deploy/.env file
+#   docker compose up -d --build
+#   docker compose exec app /usr/local/bin/pocketbase \
+#     superuser create admin@example.com '<strong-password>' --dir=/pb/pb_data
+#
+# DNS: point <domain>'s A record at this server; open ports 80 + 443.
+
+name: water3d
+
+services:
+  app:
+    build:
+      # Repo root — the image needs the frontend source and pb_migrations.
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: water3d:latest
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN (e.g. fields.example.com)}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for Let's Encrypt}
+    ports:
+      - "80:80"
+      - "443:443"
+      # PocketBase admin dashboard — bound to the host's loopback ONLY, never
+      # public. Reach it with:  ssh -L 8090:localhost:8090 <server>
+      # then open http://localhost:8090/_/
+      - "127.0.0.1:8090:8090"
+    volumes:
+      # Mounted so Caddyfile edits can be reloaded without a rebuild:
+      #   docker compose exec app caddy reload --config /etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - pb_data:/pb/pb_data
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pb_data:
