@@ -1,0 +1,108 @@
+# Traefik DYNAMIC configuration for Water 3D (hot-reloaded; providers.file.watch).
+#
+# This is the prod replacement for the old Caddyfile's handle_path blocks:
+#   * the weather-API reverse proxies under /api/*  — external upstreams, so they
+#     live here (as file-provider routers/services) rather than as container
+#     labels. `stripPrefix` == Caddy `handle_path`; `passHostHeader: false`
+#     rewrites Host to the upstream == Caddy `header_up Host`.
+#   * shared middlewares (security headers, gzip) applied to every router.
+#
+# The SPA (web) and PocketBase (/pb) routers are docker labels — see
+# docker-compose.yml.
+
+http:
+  middlewares:
+    # Applied everywhere (mirrors the old Caddy `header {}` block).
+    security-headers:
+      headers:
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+    gzip:
+      compress: {}
+
+    # Per-upstream prefix strippers (one segment each, like handle_path).
+    strip-gridmet:         { stripPrefix: { prefixes: ["/api/gridmet"] } }
+    strip-climate-toolbox: { stripPrefix: { prefixes: ["/api/climate-toolbox"] } }
+    strip-open-meteo:      { stripPrefix: { prefixes: ["/api/open-meteo"] } }
+    strip-openet:          { stripPrefix: { prefixes: ["/api/openet"] } }
+    strip-soil-data:       { stripPrefix: { prefixes: ["/api/soil-data-access"] } }
+
+  # Priority 100 so these always beat the SPA catch-all (Host + PathPrefix `/`).
+  # Path-only rules are fine: this node only serves the one app on :443, and the
+  # domain cert is selected by SNI regardless.
+  routers:
+    gridmet:
+      rule: "PathPrefix(`/api/gridmet`)"
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      service: gridmet
+      middlewares: [strip-gridmet, security-headers, gzip]
+    climate-toolbox:
+      rule: "PathPrefix(`/api/climate-toolbox`)"
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      service: climate-toolbox
+      middlewares: [strip-climate-toolbox, security-headers, gzip]
+    open-meteo:
+      rule: "PathPrefix(`/api/open-meteo`)"
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      service: open-meteo
+      middlewares: [strip-open-meteo, security-headers, gzip]
+    openet:
+      rule: "PathPrefix(`/api/openet`)"
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      service: openet
+      middlewares: [strip-openet, security-headers, gzip]
+    soil-data-access:
+      rule: "PathPrefix(`/api/soil-data-access`)"
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      service: soil-data-access
+      middlewares: [strip-soil-data, security-headers, gzip]
+
+  services:
+    gridmet:
+      loadBalancer:
+        passHostHeader: false
+        servers: [{ url: "https://toolbox-webservices.nkn.uidaho.edu" }]
+    climate-toolbox:
+      loadBalancer:
+        passHostHeader: false
+        servers: [{ url: "https://climate-dev.nkn.uidaho.edu" }]
+    open-meteo:
+      loadBalancer:
+        passHostHeader: false
+        servers: [{ url: "https://archive-api.open-meteo.com" }]
+    openet:
+      loadBalancer:
+        passHostHeader: false
+        servers: [{ url: "https://openet-api.org" }]
+    soil-data-access:
+      loadBalancer:
+        passHostHeader: false
+        servers: [{ url: "https://sdmdataaccess.nrcs.usda.gov" }]
+
+# ---- wildcard TLS certificate for *.vistacompute1.ucmerced.edu ---------------
+# The app is served under this wildcard zone, so a wildcard cert is required
+# (Let's Encrypt HTTP-01 can only issue per-hostname certs — see the ACME
+# alternative in docker-compose.yml / README). Drop the cert + key into
+# deploy/certs/ (mounted at /certs) and Traefik serves it by SNI for every
+# *.vistacompute1.ucmerced.edu host. Also set as the default cert so any
+# unmatched SNI still gets it.
+tls:
+  certificates:
+    - certFile: /certs/vistacompute1.crt
+      keyFile:  /certs/vistacompute1.key
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/vistacompute1.crt
+        keyFile:  /certs/vistacompute1.key

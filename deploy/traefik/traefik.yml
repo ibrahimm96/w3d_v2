@@ -1,0 +1,48 @@
+# Traefik STATIC configuration for Water 3D.
+#
+# Stable structure only — entry points, providers, dashboard, logging. The
+# env-dependent bits (the Let's Encrypt resolver + ACME email) are passed as
+# CLI flags in deploy/docker-compose.yml so ${ACME_EMAIL} can interpolate.
+# Everything hot-reloadable (weather-API proxies, middlewares, optional TLS
+# certs) lives in dynamic.yml; per-service routers are docker labels.
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+accessLog: {}
+
+# Dashboard on :8080. Published to the host loopback ONLY in docker-compose.yml
+# (like the PocketBase admin), so `insecure` here just means "no auth on a port
+# that isn't reachable from the internet". Reach it via an SSH tunnel:
+#   ssh -L 8080:localhost:8080 <server>  →  http://localhost:8080/dashboard/
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  web:
+    address: ":80"
+    # Every plain-HTTP request is redirected to HTTPS. Port 80 must still be
+    # open so the Let's Encrypt HTTP-01 challenge can complete.
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  # Per-service routers (web, pocketbase) are declared as labels on those
+  # containers. Only labelled containers are exposed.
+  docker:
+    exposedByDefault: false
+    network: water3d_edge
+  # Weather-API proxies, shared middlewares, and any provided TLS certs.
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true

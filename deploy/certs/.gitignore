@@ -1,0 +1,9 @@
+# The wildcard TLS cert + key for *.vistacompute1.ucmerced.edu go here and must
+# NEVER be committed. Traefik mounts this dir read-only at /certs (see
+# deploy/docker-compose.yml) and serves the cert via SNI (deploy/traefik/dynamic.yml).
+#
+# Expected filenames:
+#   vistacompute1.crt   full chain (leaf + intermediates), PEM
+#   vistacompute1.key   private key, PEM
+*
+!.gitignore

@@ -9,8 +9,8 @@ year-over-year comparisons**.
   in pure modules under `src/calcs`; data-provider contracts under `src/api`.
 - **`pocketbase/`** — PocketBase backend (Docker): user accounts + owner-scoped
   field storage. The app falls back to `localStorage` when it isn't running.
-- **`deploy/`** — production **single-container** stack (Caddy + PocketBase in one
-  image, one domain, auto-HTTPS).
+- **`deploy/`** — production **Traefik** stack (edge TLS + routing, nginx SPA,
+  PocketBase) on one subdomain under `*.vistacompute1.ucmerced.edu`, auto-HTTPS.
 
 ---
 
@@ -90,7 +90,7 @@ Data persists in the named `pb_data` Docker volume. See
 ## Data sources
 
 Weather/ET data is fetched live through the Vite dev proxy (`/api/*`); the
-production equivalent is Caddy reverse-proxying the same paths.
+production equivalent is Traefik reverse-proxying the same paths.
 
 | Source | Role | Notes |
 | --- | --- | --- |
@@ -153,21 +153,22 @@ are editable per field and override the profile defaults. See
 
 ## Deployment
 
-Production runs as **one container on one domain** — Caddy (static SPA + `/api/*`
-weather proxy + `/pb/*` → PocketBase, automatic HTTPS) and PocketBase supervised
-together. It lives in [`deploy/`](deploy/README.md):
+Production runs behind **Traefik** on one subdomain under
+`*.vistacompute1.ucmerced.edu` — Traefik terminates HTTPS and routes the static
+SPA (nginx), the `/api/*` weather proxies, and `/pb/*` → PocketBase. It lives in
+[`deploy/`](deploy/README.md):
 
 ```bash
 cd deploy
 cp ../frontend/.env.production.example ../frontend/.env.production   # set domain + Mapbox token
-export DOMAIN=fields.example.com ACME_EMAIL=you@example.com
+export DOMAIN=water3d.vistacompute1.ucmerced.edu ACME_EMAIL=you@ucmerced.edu
 docker compose up -d --build
 ```
 
 Key points: weather APIs **require** the `/api/*` proxy in prod (a bare static
 host breaks data); `VITE_POCKETBASE_URL` must point at the public
-`https://<domain>/pb`; and the PocketBase admin dashboard is loopback-only (reach
-it via `ssh -L 8090:localhost:8090 <server>`).
+`https://<domain>/pb`; and the Traefik + PocketBase admin dashboards are
+loopback-only (reach them via `ssh -L 8080:localhost:8080 -L 8090:localhost:8090 <server>`).
 
 ---
 
@@ -182,5 +183,5 @@ frontend/src/
   config/     env-driven config (backend, gridmet)
   types/      domain types (FieldConfig, WeatherRecord, CropProfile, …)
 pocketbase/   docker-compose + pb_migrations (collections/schema) — local dev backend
-deploy/       single-container prod: Dockerfile + docker-compose.yml + Caddyfile + supervisord.conf
+deploy/       Traefik prod stack: docker-compose.yml + Dockerfile (nginx SPA) + traefik/{traefik,dynamic}.yml
 ```
