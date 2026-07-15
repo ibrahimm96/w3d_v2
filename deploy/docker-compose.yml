@@ -102,6 +102,11 @@ services:
 networks:
   edge:
     name: water3d_edge
+    ipam:
+      config:
+        # Pinned: Docker's default pool hands out 172.x subnets that collide
+        # with the campus VPN (172.28.0.0/16). Host convention is 192.168.10x/24.
+        - subnet: 192.168.105.0/24
 
 volumes:
   pb_data:
