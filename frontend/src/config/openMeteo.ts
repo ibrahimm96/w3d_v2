@@ -6,9 +6,7 @@ export const openMeteoConfig = {
 };
 
 export function getOpenMeteoArchiveUrl() {
-  if (openMeteoConfig.archiveRequestBaseUrl.startsWith("/")) {
-    return `${openMeteoConfig.archiveRequestBaseUrl.replace(/\/$/, "")}${openMeteoConfig.archiveEndpoint}`;
-  }
-
-  return new URL(openMeteoConfig.archiveEndpoint, openMeteoConfig.archiveRequestBaseUrl).toString();
+  // Concatenate, never `new URL(endpoint, base)`: the endpoint's leading slash
+  // would discard the base's path if the proxy base ever carries one.
+  return `${openMeteoConfig.archiveRequestBaseUrl.replace(/\/$/, "")}${openMeteoConfig.archiveEndpoint}`;
 }
