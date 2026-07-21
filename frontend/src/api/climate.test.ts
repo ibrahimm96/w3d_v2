@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClimateToolboxForecastPet, parseClimateToolboxForecastWeather } from "./climate";
+import { parseClimateToolboxForecastPet, parseClimateToolboxForecastSupplements, parseClimateToolboxForecastWeather } from "./climate";
 
 // Mirrors the live calc-mode=all response: a table of dates plus one column per
 // ensemble member, with values serialized as strings.
@@ -99,5 +99,40 @@ describe("Climate Toolbox API client", () => {
     });
 
     expect(records.map((record) => record.date)).toEqual(["2026-06-13", "2026-06-14"]);
+  });
+
+  it("builds the GDD forecast from temperature calls alone", () => {
+    const records = parseClimateToolboxForecastWeather(
+      {
+        tmmx: memberTable("tmmx", "K", DATES, [[296.6, 298.1, 304]]),
+        tmmn: memberTable("tmmn", "K", DATES, [[283.15, 284.15, 285.15]]),
+      },
+      28,
+      { requireEto: false },
+    );
+
+    expect(records).toHaveLength(3);
+    expect(records[0]).toMatchObject({ tminC: 10, tmaxC: 23.45, etoMm: 0, precipMm: 0 });
+  });
+
+  it("enriches temperature records from non-temperature forecast payloads", () => {
+    const temperatureRecords = parseClimateToolboxForecastWeather(
+      {
+        tmmx: memberTable("tmmx", "K", DATES, [[296.6, 298.1, 304]]),
+        tmmn: memberTable("tmmn", "K", DATES, [[283.15, 284.15, 285.15]]),
+      },
+      28,
+      { requireEto: false },
+    );
+    const supplements = parseClimateToolboxForecastSupplements(
+      {
+        pet: memberTable("pet", "mm", DATES, [[5, 10.5, 17]]),
+        pr: memberTable("pr", "mm", DATES, [[0, 0, 1.1]]),
+      },
+      temperatureRecords,
+    );
+
+    expect(supplements).toHaveLength(3);
+    expect(supplements[2]).toMatchObject({ etoMm: 6.5, precipMm: 1.1 });
   });
 });

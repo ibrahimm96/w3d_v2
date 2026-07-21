@@ -56,6 +56,10 @@ export interface WeatherDataResponse {
   metadata: ApiMetadata;
 }
 
+export type WeatherRecordSupplement = Partial<
+  Pick<WeatherRecord, "precipMm" | "etoMm" | "forecastPetP10Mm" | "forecastPetP90Mm" | "rhMin" | "rhMax" | "tdewC" | "vpdKpa">
+> & { date: string };
+
 export interface HistoricalComparisonPoint {
   date: string;
   etoMm?: number;

@@ -31,6 +31,7 @@ interface ClimatologyParams {
   gddUpperTempC: number;
   /** "MM-DD" the cumulative curves restart at (the season biofix). */
   alignStartMonthDay: string;
+  enabled?: boolean;
 }
 
 export interface ClimatologyResult {
@@ -40,7 +41,7 @@ export interface ClimatologyResult {
 }
 
 export function useClimatology(params: ClimatologyParams): ClimatologyResult {
-  const { lat, lon, currentYear, gddBaseTempC, gddUpperTempC, alignStartMonthDay } = params;
+  const { lat, lon, currentYear, gddBaseTempC, gddUpperTempC, alignStartMonthDay, enabled = true } = params;
   const startYear = currentYear - CLIMATOLOGY_YEARS;
   const endYear = currentYear - 1;
   const queryClient = useQueryClient();
@@ -62,7 +63,7 @@ export function useClimatology(params: ClimatologyParams): ClimatologyResult {
 
   const rawQuery = useQuery({
     queryKey: weatherKeys.climatologyRaw(lat, lon, startYear, endYear),
-    enabled: gridMetApi.enabled && restoredStats === undefined,
+    enabled: enabled && gridMetApi.enabled && restoredStats === undefined,
     staleTime: TTL.climatologyWeather,
     meta: { persist: false },
     queryFn: () =>
@@ -79,7 +80,7 @@ export function useClimatology(params: ClimatologyParams): ClimatologyResult {
 
   const statsQuery = useQuery({
     queryKey: statsKey,
-    enabled: Boolean(rawRecords?.length),
+    enabled: enabled && Boolean(rawRecords?.length),
     staleTime: Infinity,
     queryFn: async () =>
       buildClimatologyStats(rawRecords ?? [], { startYear, endYear, gddBaseTempC, gddUpperTempC, alignStartMonthDay }),
