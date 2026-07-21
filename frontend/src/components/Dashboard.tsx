@@ -344,6 +344,10 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
     todayIso,
     forecastEndDate,
   });
+  // Every non-GDD request waits for the temperature-only season query. This
+  // keeps the default chart on the critical path and lets the rest hydrate in
+  // one background wave after GDD is usable.
+  const backgroundQueriesEnabled = seasonQuery.isSuccess;
   const weatherRecords = seasonQuery.data?.records ?? EMPTY_RECORDS;
 
   const chillQuery = useChillWeather({
@@ -353,6 +357,7 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
     fieldId: field.id,
     chillSeasonStart,
     todayIso,
+    enabled: backgroundQueriesEnabled,
   });
   const chillWeatherRecords = chillQuery.data ?? EMPTY_RECORDS;
 
@@ -365,6 +370,7 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
     lon: field.lon,
     years: selectedComparisonYears,
     currentYear,
+    enabled: backgroundQueriesEnabled,
   });
   const comparisonWeatherByYear = useMemo(
     () => pickYears(yearWeather.byYear, selectedComparisonYears),
@@ -380,12 +386,13 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
     gddBaseTempC: settings.gddBaseTempC,
     gddUpperTempC: settings.gddUpperTempC,
     alignStartMonthDay: selectedStartDate.slice(5),
+    enabled: backgroundQueriesEnabled,
   });
 
   // Strict TTL: show the loader while the persisted cache is still restoring,
   // while there is no usable data, or while a stale (expired) entry is being
   // revalidated — never render stale data.
-  const weatherLoading =
+  const primaryWeatherLoading =
     seasonWeatherEnabled && (isRestoring || seasonQuery.isLoading || (seasonQuery.isFetching && seasonQuery.isStale));
   const overlaysLoading = gridMetApi.enabled && (yearWeather.isFetching || climatology.isFetching);
   const dataWarning = useMemo<string | null>(() => {
@@ -530,7 +537,7 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
     lat: field.lat,
     lon: field.lon,
     todayIso,
-    enabled: cropMetrics.chill.enabled,
+    enabled: backgroundQueriesEnabled && cropMetrics.chill.enabled,
   });
   const chillPrecomputed = chillClimatology.data;
   const chillUsesPrecomputed = Boolean(chillPrecomputed?.hasObserved);
@@ -1088,21 +1095,21 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
         : [
             {
               label: "Crop ET (demand)",
-              value: snapshot.records.length ? formatEt(observedEtc) : "Pending",
+              value: seasonQuery.hasDetails && snapshot.records.length ? formatEt(observedEtc) : "Pending",
               detail: "Water used to date",
               icon: Droplets,
               info: "Cumulative crop ET (ETc) to date — reference ETo × the crop coefficient (Kc).",
             },
             {
               label: "Precip (supply)",
-              value: snapshot.records.length ? formatEt(observedPrecipMm) : "Pending",
+              value: seasonQuery.hasDetails && snapshot.records.length ? formatEt(observedPrecipMm) : "Pending",
               detail: "Rain supplied to date",
               icon: Gauge,
               info: "Cumulative precipitation to date, accumulated from gridMET daily totals over the season window.",
             },
             {
               label: "Irrigation deficit",
-              value: snapshot.records.length
+              value: seasonQuery.hasDetails && snapshot.records.length
                 ? `${observedEtc - observedPrecipMm >= 0 ? "" : "−"}${formatEt(Math.abs(observedEtc - observedPrecipMm))}`
                 : "Pending",
               detail: observedEtc - observedPrecipMm >= 0 ? "Demand above rainfall" : "Rain above demand",
@@ -1111,7 +1118,11 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
             },
           ];
 
-  const chartReady = !weatherLoading && chartData.length > 0;
+  const chartLoading =
+    primaryWeatherLoading ||
+    (view === "et" && seasonQuery.isBackgroundFetching && !seasonQuery.hasDetails) ||
+    (view === "chill" && !chartData.length && (chillQuery.isFetching || chillClimatology.isFetching));
+  const chartReady = !chartLoading && chartData.length > 0;
 
   return (
     <main className="content">
@@ -1405,9 +1416,9 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
                 )}
               </ResponsiveContainer>
             ) : null}
-            <ChartLoader active={weatherLoading} label="Loading crop metrics" />
+            <ChartLoader active={chartLoading} label={primaryWeatherLoading ? "Loading GDD data" : `Loading ${view} data`} />
             {chartReady && overlaysLoading && (view === "gdd" || view === "et") ? <div className="chart-overlay-hint">Loading comparison overlays…</div> : null}
-            {!weatherLoading && !chartData.length ? <div className="chart-empty">No weather records loaded for this field and date range.</div> : null}
+            {!chartLoading && !chartData.length ? <div className="chart-empty">No weather records loaded for this field and date range.</div> : null}
           </div>
 
           <div className="legend">

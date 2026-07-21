@@ -1,11 +1,16 @@
 import { climateToolboxConfig, getClimateToolboxCfsUrl } from "../config/climate";
 import { debugDataSource } from "../utils/debug";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
-import type { Coordinates, EtDataResponse, WeatherDataRequest, WeatherDataResponse } from "./contracts";
+import type { Coordinates, EtDataResponse, WeatherDataRequest, WeatherDataResponse, WeatherRecordSupplement } from "./contracts";
 import type { WeatherRecord } from "../types/domain";
 import { kelvinToCelsius, normalizeDate, percentile, toNumber } from "./toolboxShared";
 
 type ClimateForecastVariable = "pet" | "tmmx" | "tmmn" | "pr" | "sph" | "vpd";
+
+export interface ClimateForecastSupplementResult {
+  records: WeatherRecordSupplement[];
+  qualityFlags: string[];
+}
 
 // The 48-member ensemble extraction is slow like gridMET's netCDF pulls and
 // shares the proxy with them, so the 20s fetch default aborts real responses.
@@ -162,7 +167,12 @@ function interpolateHourlyTemps(tminC: number, tmaxC: number): number[] {
   });
 }
 
-export function parseClimateToolboxForecastWeather(payloads: Partial<Record<ClimateForecastVariable, unknown>>, horizonDays = climateToolboxConfig.forecastHorizonDays): WeatherRecord[] {
+export function parseClimateToolboxForecastWeather(
+  payloads: Partial<Record<ClimateForecastVariable, unknown>>,
+  horizonDays = climateToolboxConfig.forecastHorizonDays,
+  options: { requireEto?: boolean } = {},
+): WeatherRecord[] {
+  const { requireEto = true } = options;
   const tmaxByDate = new Map(parseClimateToolboxVariableTables(payloads.tmmx, "tmmx", { transform: kelvinToCelsius }).map((row) => [row.date, row.value]));
   const tminByDate = new Map(parseClimateToolboxVariableTables(payloads.tmmn, "tmmn", { transform: kelvinToCelsius }).map((row) => [row.date, row.value]));
   const precipByDate = new Map(parseClimateToolboxVariableTables(payloads.pr, "pr").map((row) => [row.date, row.value]));
@@ -179,7 +189,7 @@ export function parseClimateToolboxForecastWeather(payloads: Partial<Record<Clim
     const petRecord = petRecordsByDate.get(date);
     const etoMm = petRecord?.etoMm ?? petRecord?.etReferenceMm;
 
-    if (typeof tmaxC !== "number" || typeof tminC !== "number" || typeof etoMm !== "number") {
+    if (typeof tmaxC !== "number" || typeof tminC !== "number" || (requireEto && typeof etoMm !== "number")) {
       continue;
     }
 
@@ -192,7 +202,7 @@ export function parseClimateToolboxForecastWeather(payloads: Partial<Record<Clim
       tminC,
       tmaxC,
       precipMm: precipByDate.get(date) ?? 0,
-      etoMm,
+      etoMm: etoMm ?? 0,
       forecastPetP10Mm: petRecord?.forecastPetP10Mm,
       forecastPetP90Mm: petRecord?.forecastPetP90Mm,
       source: "forecast",
@@ -205,6 +215,32 @@ export function parseClimateToolboxForecastWeather(payloads: Partial<Record<Clim
   }
 
   return records.slice(0, horizonDays);
+}
+
+export function parseClimateToolboxForecastSupplements(
+  payloads: Partial<Record<ClimateForecastVariable, unknown>>,
+  temperatureRecords: WeatherRecord[],
+  horizonDays = climateToolboxConfig.forecastHorizonDays,
+): WeatherRecordSupplement[] {
+  const precipByDate = new Map(parseClimateToolboxVariableTables(payloads.pr, "pr").map((row) => [row.date, row.value]));
+  const petRecords = parseClimateToolboxForecastPet(payloads.pet, horizonDays);
+  const temperatureByDate = new Map(temperatureRecords.map((record) => [record.date, record]));
+
+  return petRecords.flatMap((petRecord) => {
+    const temperature = temperatureByDate.get(petRecord.date);
+    const etoMm = petRecord.etoMm ?? petRecord.etReferenceMm;
+    if (!temperature || typeof etoMm !== "number") return [];
+
+    return [
+      {
+        date: petRecord.date,
+        etoMm,
+        precipMm: precipByDate.get(petRecord.date) ?? 0,
+        forecastPetP10Mm: petRecord.forecastPetP10Mm,
+        forecastPetP90Mm: petRecord.forecastPetP90Mm,
+      },
+    ];
+  });
 }
 
 export class ClimateToolboxProvider {
@@ -242,15 +278,28 @@ export class ClimateToolboxProvider {
       throw new Error("Climate Toolbox is not enabled.");
     }
 
-    const [pet, tmmx, tmmn, pr, sph, vpd] = await Promise.all([
-      this.fetchForecastVariable("pet", request),
-      this.fetchForecastVariable("tmmx", request),
-      this.fetchForecastVariable("tmmn", request),
-      this.fetchForecastVariable("pr", request),
-      this.fetchForecastVariable("sph", request),
-      this.fetchForecastVariable("vpd", request),
-    ]);
-    const forecastRecords = parseClimateToolboxForecastWeather({ pet, tmmx, tmmn, pr, sph, vpd });
+    let forecastRecords: WeatherRecord[];
+    if (request.variableProfile === "temperature") {
+      const [tmmx, tmmn] = await Promise.all([
+        this.fetchForecastVariable("tmmx", request),
+        this.fetchForecastVariable("tmmn", request),
+      ]);
+      forecastRecords = parseClimateToolboxForecastWeather(
+        { tmmx, tmmn },
+        climateToolboxConfig.forecastHorizonDays,
+        { requireEto: false },
+      );
+    } else {
+      const [pet, tmmx, tmmn, pr, sph, vpd] = await Promise.all([
+        this.fetchForecastVariable("pet", request),
+        this.fetchForecastVariable("tmmx", request),
+        this.fetchForecastVariable("tmmn", request),
+        this.fetchForecastVariable("pr", request),
+        this.fetchForecastVariable("sph", request),
+        this.fetchForecastVariable("vpd", request),
+      ]);
+      forecastRecords = parseClimateToolboxForecastWeather({ pet, tmmx, tmmn, pr, sph, vpd });
+    }
 
     if (!forecastRecords.length) {
       throw new Error("Climate Toolbox did not return usable forecast weather records.");
@@ -264,6 +313,36 @@ export class ClimateToolboxProvider {
         generatedAt: new Date().toISOString(),
         sourceUrl: climateToolboxApi.urls.cfsForecast,
       },
+    };
+  }
+
+  async getForecastWeatherSupplement(
+    request: WeatherDataRequest,
+    temperatureRecords: WeatherRecord[],
+  ): Promise<ClimateForecastSupplementResult> {
+    if (!climateToolboxApi.enabled) {
+      throw new Error("Climate Toolbox is not enabled.");
+    }
+
+    // PET and precipitation are the only forecast fields used by the remaining
+    // mounted charts; humidity and VPD no longer generate unused API traffic.
+    const [petResult, precipResult] = await Promise.allSettled([
+      this.fetchForecastVariable("pet", request),
+      this.fetchForecastVariable("pr", request),
+    ]);
+    if (petResult.status === "rejected") {
+      throw petResult.reason;
+    }
+    const records = parseClimateToolboxForecastSupplements(
+      { pet: petResult.value, pr: precipResult.status === "fulfilled" ? precipResult.value : undefined },
+      temperatureRecords,
+    );
+    if (!records.length) {
+      throw new Error("Climate Toolbox did not return usable supplemental forecast weather records.");
+    }
+    return {
+      records,
+      qualityFlags: precipResult.status === "rejected" ? ["missing-variable:pr"] : [],
     };
   }
 }

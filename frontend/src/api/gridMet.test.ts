@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGridMetQualityFlags, buildGridMetWeatherRecords, parseGridMetSeries } from "./gridMet";
+import { buildGridMetQualityFlags, buildGridMetWeatherRecords, buildGridMetWeatherSupplements, parseGridMetSeries } from "./gridMet";
 
 describe("gridMET API client", () => {
   it("parses the live response envelope with string-valued series", () => {
@@ -89,6 +89,25 @@ describe("gridMET API client", () => {
         rhMin: undefined,
         rhMax: undefined,
         vpdKpa: undefined,
+      },
+    ]);
+  });
+
+  it("builds background supplements without requiring or duplicating temperatures", () => {
+    expect(
+      buildGridMetWeatherSupplements({
+        pet: [{ date: "2026-06-01", value: 5.2 }],
+        pr: [{ date: "2026-06-01", value: 1.4 }],
+        vpd: [{ date: "2026-06-01", value: 1.1 }],
+      }),
+    ).toEqual([
+      {
+        date: "2026-06-01",
+        etoMm: 5.2,
+        precipMm: 1.4,
+        rhMin: undefined,
+        rhMax: undefined,
+        vpdKpa: 1.1,
       },
     ]);
   });

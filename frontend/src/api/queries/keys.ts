@@ -9,8 +9,10 @@ import type { CropProfile, FieldConfig, WeatherRecord } from "../../types/domain
 const round6 = (value: number): number => Number(value.toFixed(6));
 
 export const weatherKeys = {
-  season: (lat: number, lon: number, startDate: string, endDate: string) =>
-    ["weather", "season", { lat: round6(lat), lon: round6(lon), startDate, endDate }] as const,
+  seasonGdd: (lat: number, lon: number, startDate: string, endDate: string) =>
+    ["weather", "season", "gdd", { lat: round6(lat), lon: round6(lon), startDate, endDate }] as const,
+  seasonDetails: (lat: number, lon: number, startDate: string, endDate: string, gddSignature: string) =>
+    ["weather", "season", "details", { lat: round6(lat), lon: round6(lon), startDate, endDate, gddSignature }] as const,
   chill: (lat: number, lon: number, startDate: string, endDate: string) =>
     ["weather", "chill", { lat: round6(lat), lon: round6(lon), startDate, endDate }] as const,
   year: (lat: number, lon: number, year: number, profile: "full" | "temperature" | "temperature_et") =>

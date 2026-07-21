@@ -2,7 +2,7 @@ import { getGridMetDataPath, getGridMetNetcdfUrl, gridMetConfig, gridMetVariable
 import type { WeatherRecord } from "../types/domain";
 import { debugDataSource } from "../utils/debug";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
-import type { WeatherDataRequest, WeatherDataResponse } from "./contracts";
+import type { WeatherDataRequest, WeatherDataResponse, WeatherRecordSupplement } from "./contracts";
 import { kelvinToCelsius, normalizeDate, toNumber } from "./toolboxShared";
 
 export const gridMetApi = {
@@ -16,8 +16,14 @@ export const gridMetApi = {
 // layer (src/api/queries/), which owns TTL/freshness. Here we keep only
 // in-flight dedupe so concurrent identical pulls coalesce into one request.
 const gridMetInFlightRequests = new Map<string, Promise<WeatherDataResponse>>();
+const gridMetSupplementInFlightRequests = new Map<string, Promise<GridMetSupplementResult>>();
 
 export type GridMetSeriesByVariable = Partial<Record<GridMetVariableCode, Array<{ date: string; value: number }>>>;
+
+export interface GridMetSupplementResult {
+  records: WeatherRecordSupplement[];
+  qualityFlags: string[];
+}
 
 function round(value: number, digits = 2): number {
   return Number(value.toFixed(digits));
@@ -96,6 +102,30 @@ export function buildGridMetWeatherRecords(seriesByVariable: GridMetSeriesByVari
   }
 
   return records;
+}
+
+// Non-temperature fields are fetched only after the temperature-only GDD
+// series is ready. Keeping them as supplements lets the background pass enrich
+// the same records without issuing tmin/tmax requests a second time.
+export function buildGridMetWeatherSupplements(seriesByVariable: GridMetSeriesByVariable): WeatherRecordSupplement[] {
+  const byVariable = new Map<GridMetVariableCode, Map<string, number>>();
+  for (const [variable, rows] of Object.entries(seriesByVariable) as Array<
+    [GridMetVariableCode, Array<{ date: string; value: number }>]
+  >) {
+    byVariable.set(variable, new Map(rows.map((row) => [row.date, row.value])));
+  }
+
+  const lookup = (variable: GridMetVariableCode, date: string) => byVariable.get(variable)?.get(date);
+  const dates = [...(byVariable.get("pet")?.keys() ?? [])].sort();
+
+  return dates.map((date) => ({
+    date,
+    etoMm: lookup("pet", date) ?? 0,
+    precipMm: lookup("pr", date) ?? 0,
+    rhMin: lookup("rmin", date),
+    rhMax: lookup("rmax", date),
+    vpdKpa: lookup("vpd", date),
+  }));
 }
 
 // gridMET silently truncates ranges that extend past its ~2-day data lag, so
@@ -192,6 +222,72 @@ export class GridMetProvider {
 
     gridMetInFlightRequests.set(cacheKey, promise);
     return promise;
+  }
+
+  async getDailyWeatherSupplement(request: WeatherDataRequest): Promise<GridMetSupplementResult> {
+    if (!gridMetApi.enabled) {
+      throw new Error("gridMET historical weather is not enabled.");
+    }
+
+    const cacheKey = JSON.stringify({
+      lat: Number(request.lat.toFixed(6)),
+      lon: Number(request.lon.toFixed(6)),
+      startDate: request.startDate,
+      endDate: request.endDate,
+      variableProfile: "supplement",
+    });
+    const inFlight = gridMetSupplementInFlightRequests.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const promise = this.fetchDailyWeatherSupplement(request).finally(() => {
+      gridMetSupplementInFlightRequests.delete(cacheKey);
+    });
+    gridMetSupplementInFlightRequests.set(cacheKey, promise);
+    return promise;
+  }
+
+  private async fetchDailyWeatherSupplement(request: WeatherDataRequest): Promise<GridMetSupplementResult> {
+    const required: GridMetVariableCode[] = ["pet"];
+    // Only fields consumed by the ET/precipitation charts belong here. The
+    // former full-season request also pulled rmin/rmax/vpd, but no mounted
+    // analytics view reads those series.
+    const optional: GridMetVariableCode[] = ["pr"];
+    const variables = [...required, ...optional];
+    const results = await Promise.allSettled(variables.map((variable) => this.fetchVariableSeries(variable, request)));
+    const seriesByVariable: GridMetSeriesByVariable = {};
+    const failures: string[] = [];
+    const missingOptional: GridMetVariableCode[] = [];
+
+    results.forEach((result, index) => {
+      const variable = variables[index];
+      if (result.status === "fulfilled" && result.value.length) {
+        seriesByVariable[variable] = result.value;
+      } else if (required.includes(variable)) {
+        failures.push(
+          result.status === "rejected"
+            ? result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason)
+            : `gridMET ${variable} returned no records.`,
+        );
+      } else {
+        missingOptional.push(variable);
+      }
+    });
+
+    if (failures.length) {
+      throw new Error(`gridMET returned no usable supplemental weather records: ${failures.join("; ")}`);
+    }
+
+    const records = buildGridMetWeatherSupplements(seriesByVariable);
+    if (!records.length) {
+      throw new Error("gridMET did not return usable supplemental weather records.");
+    }
+
+    return {
+      records,
+      qualityFlags: missingOptional.map((variable) => `missing-variable:${variable}`),
+    };
   }
 
   private async fetchDailyWeather(request: WeatherDataRequest): Promise<WeatherDataResponse> {
