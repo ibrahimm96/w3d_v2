@@ -36,8 +36,7 @@ const DATA_SOURCES = [
   { name: "gridMET", role: "Primary daily history — Tmin/Tmax, precip, ETo, RH, VPD back to 1979." },
   { name: "Climate Toolbox CFS", role: "28-day PET + weather forecast from a 48-member ensemble." },
   { name: "Open-Meteo", role: "Real hourly temperatures for chill-hour accumulation." },
-  { name: "NRCS Soil Data Access", role: "Soil map unit, texture, hydrologic group, and AWHC lookup." },
-  { name: "Mapbox", role: "Search + map during field setup; static thumbnails per field." },
+  { name: "Esri + OSM Nominatim", role: "Keyless satellite basemap, geocoding, and static thumbnails during field setup." },
 ];
 
 // The Home view: an about-style landing page that introduces Water 3D. Shown by
@@ -100,7 +99,7 @@ export function Home({ hasFields, onGetStarted }: HomeProps) {
         <Info size={18} aria-hidden="true" />
         <p>
           Water 3D is a decision-support tool, not automated advice. Several paths are demo/fallback and stage thresholds should
-          be reviewed before advisory use. Fields are stored in your browser until you sign in.
+          be reviewed before advisory use. Fields are stored in your browser.
         </p>
       </section>
 

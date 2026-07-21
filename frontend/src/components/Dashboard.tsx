@@ -866,13 +866,13 @@ export function Dashboard({ field, onEditStages }: DashboardProps) {
       label: "Crop ET (cumulative)",
       color: "#061827",
       source:
-        "Cumulative crop ET (ETc): OpenET satellite actual ET when available, otherwise reference ETo \u00d7 the crop coefficient (Kc) for the current growth stage.",
+        "Cumulative crop ET (ETc): reference ETo \u00d7 the crop coefficient (Kc) for the current growth stage.",
     });
     if (show.etDailyBars) {
       legendItems.push({
         label: "Daily ET",
         color: "#4a7c59",
-        source: "Daily crop ET (ETc) from gridMET-based history (OpenET actual ET, or ETo \u00d7 Kc).",
+        source: "Daily crop ET (ETc) from gridMET-based history (ETo \u00d7 Kc).",
       });
       if (forecastVisible)
         legendItems.push({
