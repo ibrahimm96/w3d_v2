@@ -26,11 +26,9 @@ export const gridMetConfig = {
 };
 
 export function getGridMetNetcdfUrl() {
-  if (gridMetConfig.requestBaseUrl.startsWith("/")) {
-    return `${gridMetConfig.requestBaseUrl.replace(/\/$/, "")}${gridMetConfig.netcdfEndpoint}`;
-  }
-
-  return new URL(gridMetConfig.netcdfEndpoint, gridMetConfig.requestBaseUrl).toString();
+  // Concatenate, never `new URL(endpoint, base)`: the endpoint's leading slash
+  // would discard the base's path (e.g. https://w3d.ucmerced.edu/api/gridmet).
+  return `${gridMetConfig.requestBaseUrl.replace(/\/$/, "")}${gridMetConfig.netcdfEndpoint}`;
 }
 
 export function getGridMetDataPath(code: GridMetVariableCode) {

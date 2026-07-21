@@ -12,9 +12,7 @@ export const climateToolboxConfig = {
 };
 
 export function getClimateToolboxCfsUrl() {
-  if (climateToolboxConfig.cfsRequestBaseUrl.startsWith("/")) {
-    return `${climateToolboxConfig.cfsRequestBaseUrl.replace(/\/$/, "")}${climateToolboxConfig.cfsEndpoint}`;
-  }
-
-  return new URL(climateToolboxConfig.cfsEndpoint, climateToolboxConfig.cfsRequestBaseUrl).toString();
+  // Concatenate, never `new URL(endpoint, base)`: the endpoint's leading slash
+  // would discard the base's path (e.g. https://w3d.ucmerced.edu/api/climate-toolbox).
+  return `${climateToolboxConfig.cfsRequestBaseUrl.replace(/\/$/, "")}${climateToolboxConfig.cfsEndpoint}`;
 }
