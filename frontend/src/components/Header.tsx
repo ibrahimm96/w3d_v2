@@ -24,7 +24,7 @@ export function Header({ activeView, canViewAnalytics, onViewChange }: HeaderPro
   return (
     <header className="topbar">
       <button type="button" className="brand brand-button" onClick={() => selectView("Home")}>
-        <img className="brand-mark" src="/water-3d-mark.png" alt="" />
+        <img className="brand-mark" src={`${import.meta.env.BASE_URL}water-3d-mark.png`} alt="" />
         <span>Water 3D</span>
       </button>
       <nav id="primary-nav" className={`main-nav${menuOpen ? " nav-open" : ""}`} aria-label="Primary">
